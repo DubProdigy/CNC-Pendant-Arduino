@@ -1,0 +1,524 @@
+#include <Keyboard.h>
+#include <ClickButton.h>
+#include <LCD_I2C.h>
+LCD_I2C lcd(0x27);
+
+// This used in loop, set to actual buttons and avoid out-of-bounds error when counting from 1.
+// buttons = array size, btnCount = actual buttons
+const int buttons = 11;
+const int btnCount = 10;
+
+// Assign pins to button names
+const int btnDummy = 7;
+const int btnX = 7;
+const int btnY = 8;
+const int btnZ = 6;
+const int btnProbe = 9;
+const int btnMove = 10;
+const int btnConn = 16;
+const int btnX1 = 18;
+const int btnX2 = 19;
+const int btnY1 = 20;
+const int btnY2 = 21;
+
+// Set some intitial values
+const int steps = 3;
+float stepSz[steps] = {0.1, 1.0, 10.0};
+int lastStep_XY = 1;
+int lastStep_Z = 4;
+String axSel = "X";
+unsigned long clearMillis;
+int hFlag = 0;
+
+ClickButton button[buttons] =
+{
+  // used instances of Clickbutton
+  ClickButton (btnDummy, LOW, CLICKBTN_PULLUP),
+  ClickButton (btnX, LOW, CLICKBTN_PULLUP),
+  ClickButton (btnY, LOW, CLICKBTN_PULLUP),
+  ClickButton (btnZ, LOW, CLICKBTN_PULLUP),
+  ClickButton (btnProbe, LOW, CLICKBTN_PULLUP),
+  ClickButton (btnMove, LOW, CLICKBTN_PULLUP),
+  ClickButton (btnConn, LOW, CLICKBTN_PULLUP),
+  ClickButton (btnX1, LOW, CLICKBTN_PULLUP),
+  ClickButton (btnX2, LOW, CLICKBTN_PULLUP),
+  ClickButton (btnY1, LOW, CLICKBTN_PULLUP),
+  ClickButton (btnY2, LOW, CLICKBTN_PULLUP)
+};
+
+void setup() {
+  Serial.begin(115200);
+  Keyboard.begin();
+  lcd.begin();
+  lcd.backlight();
+  lcd.clear();
+  lcdHome();
+
+  for (int i = 1; i <= btnCount; i++)
+  {
+    button[i].debounceTime   = 20;   // Debounce timer in ms
+    button[i].multiclickTime = 250;  // Time limit for multi clicks
+    button[i].longClickTime  = 1000; // Time until long clicks register
+  }
+}
+
+void loop() {
+  if (millis() - clearMillis > 30000 && hFlag == 1) {
+    lcdHome();
+    hFlag = 0;
+  }
+  for (int i = 1; i <= btnCount; i++)
+  {
+    // Update state of all button
+    button[i].Update();
+  }
+  if (button[1].clicks != 0)
+  {
+    axSel = "X";
+    switch (button[1].clicks)
+    {
+      case 1: // Single click
+        lastStep_XY = 0;
+        chg_STEP_XY();
+        break;
+      case 2: // Double click
+        chg_STEP_XY();
+        break;
+      case 3: // Triple click
+        break;
+      case -1: // Single Click and Hold
+        shortcut_ZERO_X();
+      case -2: // Double Click and Hold
+        break;
+      case -3: // Triple Click and Hold
+        break;
+    }
+
+  }
+  if (button[2].clicks != 0)
+  {
+    axSel = "Y";
+    switch (button[2].clicks)
+    {
+      case 1: // Single click
+        lastStep_XY = 0;
+        chg_STEP_XY();
+        break;
+      case 2: // Double click
+        chg_STEP_XY();
+        break;
+      case 3: // Triple click
+        break;
+      case -1: // Single Click and Hold
+        shortcut_ZERO_Y();
+      case -2: // Double Click and Hold
+        break;
+      case -3: // Triple Click and Hold
+        break;
+    }
+
+  }
+  if (button[3].clicks != 0)
+  {
+    axSel = "Z";
+    switch (button[3].clicks)
+    {
+      case 1: // Single click
+        lastStep_Z = 3;
+        chg_STEP_Z();
+        break;
+      case 2: // Double click
+        chg_STEP_Z();
+        break;
+      case 3: // Triple click
+        break;
+      case -1: // Single Click and Hold
+        shortcut_ZERO_Z();
+      case -2: // Double Click and Hold
+        break;
+      case -3: // Triple Click and Hold
+        break;
+    }
+  }
+  if (button[4].clicks != 0)
+  {
+    switch (button[4].clicks)
+    {
+      case 1: // Single click
+        conn_UNLOCK();
+        break;
+      case 2: // Double click
+        conn_CONNECT();
+        break;
+      case 3: // Triple click
+        break;
+      case -1: // Single Click and Hold
+        conn_SOFT_RESET();
+        break;
+      case -2: // Double Click and Hold
+        break;
+      case -3: // Triple Click and Hold
+        break;
+    }
+
+  }
+  if (button[5].clicks != 0)
+  {
+    switch (button[5].clicks)
+    {
+      case 1: // Single click
+        move_Z10();
+        break;
+      case 2: // Double click
+        break;
+      case 3: // Triple click
+        break;
+      case -1: // Single Click and Hold
+        move_GO_ZERO();
+        break;
+      case -2: // Double Click and Hold
+        break;
+      case -3: // Triple Click and Hold
+        break;
+    }
+  }
+  if (button[6].clicks != 0)
+  {
+    switch (button[6].clicks)
+    {
+      case 1: // Single click
+        probe_Z_PROBE();
+        break;
+      case 2: // Double click
+        probe_STOP();
+        break;
+      case 3: // Triple click
+        app_ESC();
+        break;
+      case -1: // Single Click and Hold
+        break;
+      case -2: // Double Click and Hold
+        break;
+      case -3: // Triple Click and Hold
+        break;
+    }
+
+  }
+  if (button[7].clicks != 0)
+  {
+    switch (button[7].clicks)
+    {
+      case 1: // Single click
+        move_Jog_Y_L();
+        break;
+      case 2: // Double click
+        move_Jog_Z_U();
+        break;
+      case 3: // Triple click
+        break;
+      case -1: // Single Click and Hold
+        break;
+      case -2: // Double Click and Hold
+        break;
+      case -3: // Triple Click and Hold
+        break;
+    }
+
+  }
+  if (button[8].clicks != 0)
+  {
+    switch (button[8].clicks)
+    {
+      case 1: // Single click
+        move_Jog_X_L();
+        break;
+      case 2: // Double click
+        break;
+      case 3: // Triple click
+        break;
+      case -1: // Single Click and Hold
+        break;
+      case -2: // Double Click and Hold
+        break;
+      case -3: // Triple Click and Hold
+        break;
+    }
+
+  }
+  if (button[9].clicks != 0)
+  {
+    switch (button[9].clicks)
+    {
+      case 1: // Single click
+        move_Jog_Y_R();
+        break;
+      case 2: // Double click
+        move_Jog_Z_D();
+        break;
+      case 3: // Triple click
+        break;
+      case -1: // Single Click and Hold
+        break;
+      case -2: // Double Click and Hold
+        break;
+      case -3: // Triple Click and Hold
+        break;
+    }
+
+  }
+  if (button[10].clicks != 0)
+  {
+    switch (button[10].clicks)
+    {
+      case 1: // Single click
+        move_Jog_X_R();
+        break;
+      case 2: // Double click
+        break;
+      case 3: // Triple click
+        break;
+      case -1: // Single Click and Hold
+        break;
+      case -2: // Double Click and Hold
+        break;
+      case -3: // Triple Click and Hold
+        break;
+    }
+
+  }
+}
+
+void app_ESC()
+{
+
+  Keyboard.press(KEY_ESC);
+  delay(100);
+  Keyboard.releaseAll();
+}
+
+void chg_STEP_XY() {
+  // shortcut keys CTRL+ALT+(1-3)
+  lastStep_XY = (lastStep_XY == 3) ? 0 : lastStep_XY;
+  lastStep_XY++;
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press(char(48 + lastStep_XY));
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Axis: " + axSel, "Step: " + String(stepSz[lastStep_XY - 1]));
+}
+
+// shortcut keys CTRL+ALT+(4-6)
+void chg_STEP_Z() {
+  lastStep_Z = (lastStep_Z == 7) ? 3 : lastStep_Z;
+  lastStep_Z++;
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press(char(48 + lastStep_Z));
+  Serial.println(char(48 + lastStep_Z));
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Axis: " + axSel, "Step: " + String(stepSz[lastStep_Z - 4]));
+}
+
+void shortcut_ZERO_X()
+{
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press('1');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Axis: " + axSel, axSel + " zeroed");
+}
+
+void shortcut_ZERO_Y()
+{
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press('2');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Axis: " + axSel, axSel + " zeroed");
+}
+
+void shortcut_ZERO_Z()
+{
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press('3');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Axis: " + axSel, axSel + " zeroed");
+}
+
+// --- Probe button (left) ---
+void probe_Z_PROBE()
+{
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press('p');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Z Probe", "running");
+}
+
+void probe_STOP()
+{
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press(KEY_LEFT_SHIFT);
+  Keyboard.press('s');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Z Probe", "STOPPED");
+}
+
+// --- Move button (Middle)---
+void move_GO_ZERO()
+{
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_SHIFT);
+  Keyboard.press('h');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Homing...", " ");
+}
+void move_Z10()
+{
+  lcdUpdate("Moving Z", "up 10mm");
+  // Set to step size 10mm
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press('6');
+  delay(100);
+  Keyboard.releaseAll();
+  // Move up
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press('q');
+  delay(100);
+  Keyboard.releaseAll();
+  // Reset to last step size
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press(char(48 + lastStep_Z));
+  delay(100);
+  Keyboard.releaseAll();
+}
+
+void move_ZERO_XY()
+{
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press('y');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Zero Axis", "X & Y Zeroed");
+}
+
+// --- CONN button (Right)---
+void conn_UNLOCK()
+{
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press(KEY_LEFT_SHIFT);
+  Keyboard.press('u');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Connection", "Unlock");
+}
+
+void conn_SOFT_RESET()
+{
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press(KEY_LEFT_SHIFT);
+  Keyboard.press('r');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Connection", "Soft Reset");
+}
+
+void conn_CONNECT()
+{
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press(KEY_LEFT_SHIFT);
+  Keyboard.press('c');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Connection", "Connect");
+}
+
+void move_STOP()
+{
+  Keyboard.press(KEY_LEFT_CTRL);
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press(KEY_LEFT_SHIFT);
+  Keyboard.press('s');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("PANIC!", "STOP!");
+}
+
+void move_Jog_X_L()
+{
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press('a');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Jogging", "X Axis -" + String(stepSz[lastStep_XY - 1]) + "mm");
+}
+void move_Jog_X_R()
+{
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press('d');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Jogging", "X Axis +" + String(stepSz[lastStep_XY - 1]) + "mm");
+}
+void move_Jog_Y_L()
+{
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press('w');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Jogging", "Y Axis +" + String(stepSz[lastStep_XY - 1]) + "mm");
+}
+void move_Jog_Y_R()
+{
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press('x');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Jogging", "Y Axis -" + String(stepSz[lastStep_XY - 1]) + "mm");
+}
+void move_Jog_Z_D()
+{
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press('z');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Jogging", "Z Axis -" + String(stepSz[lastStep_Z - 4]) + "mm");
+}
+void move_Jog_Z_U()
+{
+  Keyboard.press(KEY_LEFT_ALT);
+  Keyboard.press('q');
+  delay(100);
+  Keyboard.releaseAll();
+  lcdUpdate("Jogging", "Z Axis +" + String(stepSz[lastStep_Z - 4]) + "mm");
+}
+
+void lcdUpdate(String L1, String L2) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(L1);
+  lcd.setCursor(0, 1);
+  lcd.print(L2);
+  clearMillis = millis();
+  hFlag = 1;
+}
+
+void lcdHome() {
+  lcd.clear();
+  lcd.setCursor(1, 0);
+  lcd.print("TransparentCNC");
+  lcd.setCursor(0, 1);
+  lcd.print("UGCS Pendant 2.5");
+}
